@@ -11,10 +11,22 @@ resource "aws_vpc" "lab" {
 resource "aws_subnet" "app" {
   vpc_id                  = aws_vpc.lab.id
   cidr_block              = "10.20.1.0/24"
+  availability_zone       = "${var.aws_region}a"
   map_public_ip_on_launch = false
 
   tags = {
     Name = "1million-app"
+  }
+}
+
+resource "aws_subnet" "app_second" {
+  vpc_id                  = aws_vpc.lab.id
+  cidr_block              = "10.20.2.0/24"
+  availability_zone       = "${var.aws_region}b"
+  map_public_ip_on_launch = false
+
+  tags = {
+    Name = "1million-app-second"
   }
 }
 
@@ -41,5 +53,10 @@ resource "aws_route_table" "app_routes" {
 
 resource "aws_route_table_association" "app" {
   subnet_id      = aws_subnet.app.id
+  route_table_id = aws_route_table.app_routes.id
+}
+
+resource "aws_route_table_association" "app_second" {
+  subnet_id      = aws_subnet.app_second.id
   route_table_id = aws_route_table.app_routes.id
 }
