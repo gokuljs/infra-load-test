@@ -8,7 +8,7 @@ resource "aws_autoscaling_group" "app" {
   health_check_type         = "ELB"
   health_check_grace_period = 600
   default_instance_warmup   = 300
-  wait_for_capacity_timeout = "15m"
+  wait_for_capacity_timeout = "5m"
 
   # Wait for healthy targets at creation only. An exact ongoing ELB count would
   # conflict with the capacity changes made by automatic scaling.
