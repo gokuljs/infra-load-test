@@ -3,26 +3,59 @@ data "aws_ssm_parameter" "amazon_linux" {
   with_decryption = false
 }
 
-resource "aws_instance" "app" {
-  ami                         = data.aws_ssm_parameter.amazon_linux.value
-  instance_type               = "t3.micro"
-  subnet_id                   = aws_subnet.app.id
-  associate_public_ip_address = true
-  vpc_security_group_ids      = [aws_security_group.app.id]
-  iam_instance_profile        = aws_iam_instance_profile.app.name
+locals {
+  app_tags = {
+    Project     = "1million-testing"
+    Environment = "lab"
+    ManagedBy   = "terraform"
+    Name        = "1million-nodejs-lab"
+  }
+}
 
-  user_data = templatefile("${path.module}/templates/startup.sh.tftpl", {
+# A launch template describes each machine; the Auto Scaling Group launches it.
+resource "aws_launch_template" "app" {
+  name_prefix   = "1million-nodejs-"
+  description   = "Node.js lab machines managed by Auto Scaling"
+  image_id      = data.aws_ssm_parameter.amazon_linux.value
+  instance_type = "t2.micro"
+
+  iam_instance_profile {
+    name = aws_iam_instance_profile.app.name
+  }
+
+  # Public IPs provide outbound downloads in this lab without a NAT gateway.
+  # Inbound API traffic is permitted only from the ALB security group.
+  network_interfaces {
+    device_index                = 0
+    associate_public_ip_address = true
+    delete_on_termination       = true
+    security_groups             = [aws_security_group.app.id]
+  }
+
+  user_data = base64encode(templatefile("${path.module}/templates/startup.sh.tftpl", {
     aws_region     = var.aws_region
     repository_url = aws_ecr_repository.app.repository_url
     image_digest   = data.aws_ssm_parameter.app_image_digest.value
     nginx_config   = file("${path.module}/templates/nginx.conf")
-  })
-  user_data_replace_on_change = true
+  }))
 
-  root_block_device {
-    volume_type = "gp3"
-    volume_size = 20
-    encrypted   = true
+  block_device_mappings {
+    device_name = "/dev/xvda"
+
+    ebs {
+      volume_type           = "gp3"
+      volume_size           = 20
+      encrypted             = true
+      delete_on_termination = true
+    }
+  }
+
+  credit_specification {
+    cpu_credits = "standard"
+  }
+
+  monitoring {
+    enabled = true
   }
 
   metadata_options {
@@ -31,13 +64,16 @@ resource "aws_instance" "app" {
     http_put_response_hop_limit = 1
   }
 
-  tags = {
-    Name = "1million-nodejs-lab"
+  dynamic "tag_specifications" {
+    for_each = toset(["instance", "volume"])
+
+    content {
+      resource_type = tag_specifications.value
+      tags          = local.app_tags
+    }
   }
 
-  depends_on = [
-    aws_route_table_association.app,
-    aws_vpc_security_group_egress_rule.https,
-    aws_iam_role_policy.app_ecr_pull,
-  ]
+  tags = {
+    Name = "1million-nodejs-launch-template"
+  }
 }
