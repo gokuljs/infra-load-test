@@ -1,11 +1,21 @@
-output "instance_public_ip" {
-  description = "Public IPv4 address of the lab EC2 instance."
-  value       = aws_instance.app.public_ip
+output "alb_dns_name" {
+  description = "Public DNS name of the lab Application Load Balancer."
+  value       = aws_lb.app.dns_name
 }
 
 output "app_url" {
   description = "HTTP API endpoint through Nginx; restricted to api_client_cidr."
-  value       = "http://${aws_instance.app.public_ip}/api/ping"
+  value       = "http://${aws_lb.app.dns_name}/api/ping"
+}
+
+output "asg_name" {
+  description = "Auto Scaling Group to inspect for machine counts and scaling activity."
+  value       = aws_autoscaling_group.app.name
+}
+
+output "dashboard_name" {
+  description = "CloudWatch dashboard containing latency, CPU, errors, and fleet capacity."
+  value       = aws_cloudwatch_dashboard.lab.dashboard_name
 }
 
 output "image_repository_url" {
