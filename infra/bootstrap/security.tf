@@ -17,6 +17,15 @@ resource "aws_vpc_security_group_ingress_rule" "api" {
   to_port                      = 80
 }
 
+resource "aws_vpc_security_group_ingress_rule" "ssh" {
+  security_group_id = aws_security_group.app.id
+  description       = "SSH from the lab client"
+  cidr_ipv4         = var.api_client_cidr
+  ip_protocol       = "tcp"
+  from_port         = 22
+  to_port           = 22
+}
+
 resource "aws_vpc_security_group_egress_rule" "https" {
   security_group_id = aws_security_group.app.id
   description       = "HTTPS downloads and AWS service access"

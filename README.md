@@ -54,3 +54,25 @@ Apply creates ECR and, on the first run or when the app build inputs change, pub
 If Docker Desktop startup fails, open it with `open -a Docker`, wait until `docker info` succeeds, and rerun the same apply. For remote Docker engines and other contexts, restore the selected engine's connection before retrying. An existing image tag can be reused without starting Docker. A failed build or push leaves the SSM digest at its previous value.
 
 `terraform -chdir=infra/bootstrap destroy` still removes ECR and its images. The next apply recreates the repository, publishes the image, and writes the new digest before EC2 starts. If an image is deleted from ECR outside Terraform while the repository still exists, run `terraform -chdir=infra/bootstrap apply -replace=terraform_data.app_image` to publish it again.
+
+### SSH access
+
+Terraform allows inbound TCP port 22 to the app machines from `api_client_cidr` in `infra/bootstrap/terraform.tfvars`. Set it to your current public IPv4 address followed by `/32`. You can check your address with `curl -4 -fsS https://checkip.amazonaws.com`. Update the value and apply whenever your public IP changes. The SSH rule applies to existing machines and future Auto Scaling launches.
+
+If you already added an identical SSH rule manually, find its `sgr-...` security group rule ID and import it before applying. The rule must match the app security group, TCP port 22, and the configured client CIDR. Replace `sgr-EXISTING_RULE_ID` with that rule's ID.
+
+```sh
+terraform -chdir=infra/bootstrap import aws_vpc_security_group_ingress_rule.ssh sgr-EXISTING_RULE_ID
+```
+
+Run `terraform -chdir=infra/bootstrap apply` to create or update the SSH rule. Connect from your Mac using AWS CLI v2 and EC2 Instance Connect, replacing `i-INSTANCE_ID` with an app instance ID.
+
+```sh
+aws ec2-instance-connect ssh \
+  --region us-east-1 \
+  --instance-id i-INSTANCE_ID \
+  --os-user ec2-user \
+  --connection-type direct
+```
+
+EC2 Instance Connect supplies a temporary SSH key for each connection. Your AWS CLI identity needs `ec2:DescribeInstances` and `ec2-instance-connect:SendSSHPublicKey` permissions for the target instance.

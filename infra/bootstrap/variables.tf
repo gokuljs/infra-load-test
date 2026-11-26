@@ -14,7 +14,7 @@ variable "aws_account_id" {
 }
 
 variable "api_client_cidr" {
-  description = "Public IPv4 address allowed to access the lab API through the ALB."
+  description = "Public IPv4 address of the lab client, used for SSH access to app machines."
   type        = string
   nullable    = false
 
