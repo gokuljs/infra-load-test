@@ -42,7 +42,7 @@ The package lockfile pins `light-my-request` to a Node.js 20-compatible release;
 
 ## AWS lab deployment
 
-From the repository root, run Terraform with the AWS CLI configured for the lab account and Docker running with Buildx available.
+From the repository root, run Terraform with the AWS CLI configured for the lab account and Docker installed with Buildx available. When a build is needed on macOS, the publish script starts Docker Desktop automatically for the local `desktop-linux` or `default` context and allows up to 120 seconds for startup. It verifies the engine is ready before building. Set up Docker Desktop once before the first apply, including any initial prompts.
 
 ```sh
 terraform -chdir=infra/bootstrap init
@@ -50,5 +50,7 @@ terraform -chdir=infra/bootstrap apply
 ```
 
 Apply creates ECR and, on the first run or when the app build inputs change, publishes a `linux/amd64` image and records its ECR digest in `/1million/lab/app-image-digest`. Terraform verifies that digest in ECR before it creates or updates the launch template. An apply with unchanged build inputs reuses the published image. Existing EC2 instances pick up a new image when replaced.
+
+If Docker Desktop startup fails, open it with `open -a Docker`, wait until `docker info` succeeds, and rerun the same apply. For remote Docker engines and other contexts, restore the selected engine's connection before retrying. An existing image tag can be reused without starting Docker. A failed build or push leaves the SSM digest at its previous value.
 
 `terraform -chdir=infra/bootstrap destroy` still removes ECR and its images. The next apply recreates the repository, publishes the image, and writes the new digest before EC2 starts. If an image is deleted from ECR outside Terraform while the repository still exists, run `terraform -chdir=infra/bootstrap apply -replace=terraform_data.app_image` to publish it again.

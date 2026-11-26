@@ -44,6 +44,38 @@ image_ref="$APP_ECR_REPOSITORY_URL:$APP_IMAGE_TAG"
 image_result=$(lookup_image)
 IFS=$'\t' read -r digest failure_code <<< "$image_result"
 if [[ $failure_code == ImageNotFound ]]; then
+  if ! command -v docker >/dev/null; then
+    echo "Install Docker with Buildx, start Docker, and rerun terraform apply." >&2
+    exit 1
+  fi
+  if ! docker buildx version >/dev/null; then
+    echo "Install Docker Buildx (included with Docker Desktop) and rerun terraform apply." >&2
+    exit 1
+  fi
+  if ! docker info >/dev/null 2>&1; then
+    if [[ $(uname -s) != Darwin || -n ${DOCKER_HOST:-} ]]; then
+      echo "The configured Docker engine is unavailable. Start it or restore its connection, wait for 'docker info' to succeed, and rerun terraform apply." >&2
+      exit 1
+    fi
+
+    docker_context=$(docker context show)
+    docker_endpoint=$(docker context inspect "$docker_context" --format '{{.Endpoints.docker.Host}}')
+    if [[ ( $docker_context != desktop-linux && $docker_context != default ) || $docker_endpoint != unix://* ]]; then
+      echo "Docker context '$docker_context' is unavailable. Restore its connection, wait for 'docker info' to succeed, and rerun terraform apply." >&2
+      exit 1
+    fi
+
+    echo "Starting Docker Desktop and waiting up to 120 seconds for startup."
+    if ! docker desktop start --timeout 120; then
+      echo "Docker Desktop could not start. Open it with 'open -a Docker', wait for 'docker info' to succeed, and rerun terraform apply." >&2
+      exit 1
+    fi
+    if ! docker info >/dev/null; then
+      echo "Docker Desktop startup finished but its engine is unavailable. Check the Docker Desktop status and Docker context, wait for 'docker info' to succeed, and rerun terraform apply." >&2
+      exit 1
+    fi
+  fi
+
   repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
   aws ecr get-login-password --region "$APP_AWS_REGION" |
     docker login --username AWS --password-stdin "$registry"
