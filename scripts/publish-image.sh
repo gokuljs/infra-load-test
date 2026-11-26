@@ -7,7 +7,21 @@ export AWS_PAGER=""
 : "${APP_AWS_REGION:?Set APP_AWS_REGION}"
 : "${APP_AWS_ACCOUNT_ID:?Set APP_AWS_ACCOUNT_ID}"
 : "${APP_IMAGE_TAG:?Set APP_IMAGE_TAG}"
-: "${APP_IMAGE_DIGEST_PARAMETER:?Set APP_IMAGE_DIGEST_PARAMETER}"
+
+case $#:${1:-} in
+  0:)
+    : "${APP_IMAGE_DIGEST_PARAMETER:?Set APP_IMAGE_DIGEST_PARAMETER}"
+    ;;
+  1:--digest-only)
+    : "${APP_IMAGE_CONTEXT:?Set APP_IMAGE_CONTEXT}"
+    # Keep machine-readable output separate from Docker and AWS diagnostics.
+    exec 3>&1 1>&2
+    ;;
+  *)
+    echo 'Usage: bash scripts/publish-image.sh [--digest-only]' >&2
+    exit 2
+    ;;
+esac
 
 if [[ ! $APP_ECR_REPOSITORY_URL =~ ^([0-9]{12})\.dkr\.ecr\.([a-z0-9-]+)\.amazonaws\.com(\.cn)?/([a-z0-9._/-]+)$ ]]; then
   echo "Expected APP_ECR_REPOSITORY_URL to name a private ECR repository." >&2
@@ -45,16 +59,16 @@ image_result=$(lookup_image)
 IFS=$'\t' read -r digest failure_code <<< "$image_result"
 if [[ $failure_code == ImageNotFound ]]; then
   if ! command -v docker >/dev/null; then
-    echo "Install Docker with Buildx, start Docker, and rerun terraform apply." >&2
+    echo "Install Docker with Buildx, start Docker, and retry publishing." >&2
     exit 1
   fi
   if ! docker buildx version >/dev/null; then
-    echo "Install Docker Buildx (included with Docker Desktop) and rerun terraform apply." >&2
+    echo "Install Docker Buildx (included with Docker Desktop) and retry publishing." >&2
     exit 1
   fi
   if ! docker info >/dev/null 2>&1; then
     if [[ $(uname -s) != Darwin || -n ${DOCKER_HOST:-} ]]; then
-      echo "The configured Docker engine is unavailable. Start it or restore its connection, wait for 'docker info' to succeed, and rerun terraform apply." >&2
+      echo "The configured Docker engine is unavailable. Restore it, wait for 'docker info' to succeed, and retry publishing." >&2
       exit 1
     fi
 
@@ -77,10 +91,14 @@ if [[ $failure_code == ImageNotFound ]]; then
   fi
 
   repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+  build_context="$repo_root/nodejs"
+  if [[ ${1:-} == --digest-only ]]; then
+    build_context="$APP_IMAGE_CONTEXT"
+  fi
   aws ecr get-login-password --region "$APP_AWS_REGION" |
     docker login --username AWS --password-stdin "$registry"
   docker buildx build --platform linux/amd64 --provenance=false \
-    --tag "$image_ref" --push "$repo_root/nodejs"
+    --tag "$image_ref" --push "$build_context"
 
   image_result=$(lookup_image)
   IFS=$'\t' read -r digest failure_code <<< "$image_result"
@@ -91,6 +109,10 @@ if [[ $failure_code != None || ! $digest =~ ^sha256:[0-9a-f]{64}$ ]]; then
   exit 1
 fi
 
-aws ssm put-parameter --region "$APP_AWS_REGION" \
-  --name "$APP_IMAGE_DIGEST_PARAMETER" --type String --value "$digest" --overwrite >/dev/null
-printf 'Image %s has digest %s. Updated %s.\n' "$image_ref" "$digest" "$APP_IMAGE_DIGEST_PARAMETER"
+if [[ ${1:-} == --digest-only ]]; then
+  printf '%s\n' "$digest" >&3
+else
+  aws ssm put-parameter --region "$APP_AWS_REGION" \
+    --name "$APP_IMAGE_DIGEST_PARAMETER" --type String --value "$digest" --overwrite >/dev/null
+  printf 'Image %s has digest %s. Updated %s.\n' "$image_ref" "$digest" "$APP_IMAGE_DIGEST_PARAMETER"
+fi
