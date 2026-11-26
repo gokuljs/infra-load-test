@@ -39,3 +39,16 @@ curl -H 'content-type: application/json' -d '{"message":"hello"}' http://127.0.0
 ```
 
 The package lockfile pins `light-my-request` to a Node.js 20-compatible release; newer releases pull a `cookie` version that requires Node.js 22. No throughput or capacity claim is made before a workload and environment are measured and recorded.
+
+## AWS lab deployment
+
+From the repository root, run Terraform with the AWS CLI configured for the lab account and Docker running with Buildx available.
+
+```sh
+terraform -chdir=infra/bootstrap init
+terraform -chdir=infra/bootstrap apply
+```
+
+Apply creates ECR and, on the first run or when the app build inputs change, publishes a `linux/amd64` image and records its ECR digest in `/1million/lab/app-image-digest`. Terraform verifies that digest in ECR before it creates or updates the launch template. An apply with unchanged build inputs reuses the published image. Existing EC2 instances pick up a new image when replaced.
+
+`terraform -chdir=infra/bootstrap destroy` still removes ECR and its images. The next apply recreates the repository, publishes the image, and writes the new digest before EC2 starts. If an image is deleted from ECR outside Terraform while the repository still exists, run `terraform -chdir=infra/bootstrap apply -replace=terraform_data.app_image` to publish it again.

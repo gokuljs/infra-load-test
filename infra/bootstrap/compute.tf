@@ -35,7 +35,7 @@ resource "aws_launch_template" "app" {
   user_data = base64encode(templatefile("${path.module}/templates/startup.sh.tftpl", {
     aws_region     = var.aws_region
     repository_url = aws_ecr_repository.app.repository_url
-    image_digest   = data.aws_ssm_parameter.app_image_digest.value
+    image_digest   = data.aws_ecr_image.app.id
     nginx_config   = file("${path.module}/templates/nginx.conf")
     node_log_group = aws_cloudwatch_log_group.app["nodejs"].name
     cloudwatch_config = templatefile("${path.module}/templates/cloudwatch-agent.json.tftpl", {

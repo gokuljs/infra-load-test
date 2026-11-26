@@ -24,6 +24,6 @@ output "log_group_names" {
 }
 
 output "image_repository_url" {
-  description = "Private repository where the build pipeline publishes the app image."
+  description = "Private ECR repository where Terraform publishes the app image."
   value       = aws_ecr_repository.app.repository_url
 }
