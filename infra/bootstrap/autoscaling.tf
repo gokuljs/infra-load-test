@@ -53,6 +53,7 @@ resource "aws_autoscaling_group" "app" {
     aws_vpc_security_group_egress_rule.https,
     aws_vpc_security_group_egress_rule.alb_app,
     aws_iam_role_policy.app_ecr_pull,
+    aws_iam_role_policy.app_logs,
     aws_lb_listener.http,
   ]
 }

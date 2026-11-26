@@ -1,0 +1,33 @@
+{
+  "agent": {
+    "region": "${aws_region}"
+  },
+  "logs": {
+    "force_flush_interval": 5,
+    "logs_collected": {
+      "files": {
+        "collect_list": [
+          {
+            "file_path": "/var/log/nginx/access.log",
+            "log_group_name": "${log_groups.nginx_access}",
+            "log_stream_name": "{instance_id}",
+            "timestamp_format": "%Y-%m-%dT%H:%M:%S",
+            "timezone": "Local"
+          },
+          {
+            "file_path": "/var/log/nginx/error.log",
+            "log_group_name": "${log_groups.nginx_error}",
+            "log_stream_name": "{instance_id}",
+            "timestamp_format": "%Y/%m/%d %H:%M:%S",
+            "timezone": "Local"
+          },
+          {
+            "file_path": "/var/log/nodejs-bootstrap.log",
+            "log_group_name": "${log_groups.bootstrap}",
+            "log_stream_name": "{instance_id}"
+          }
+        ]
+      }
+    }
+  }
+}

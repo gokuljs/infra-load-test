@@ -46,3 +46,24 @@ resource "aws_iam_role_policy" "app_ecr_pull" {
     ]
   })
 }
+
+resource "aws_iam_role_policy" "app_logs" {
+  name = "publish-app-logs"
+  role = aws_iam_role.app.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+
+    Statement = [
+      {
+        Sid    = "PublishApplicationLogs"
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+        ]
+        Resource = [for group in aws_cloudwatch_log_group.app : "${group.arn}:log-stream:*"]
+      }
+    ]
+  })
+}

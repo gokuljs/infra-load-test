@@ -26,8 +26,28 @@ retry() {
   return 1
 }
 
-echo "Installing Docker, Nginx, and the AWS CLI."
-retry dnf install -y docker nginx awscli-2
+echo "Installing Docker, Nginx, the AWS CLI, and the CloudWatch agent."
+retry dnf install -y docker nginx awscli-2 amazon-cloudwatch-agent
+
+echo "Starting centralized log collection."
+cat > /opt/aws/amazon-cloudwatch-agent/etc/cloudwatch-agent.json <<'CLOUDWATCH_CONFIG'
+${cloudwatch_config}
+CLOUDWATCH_CONFIG
+retry /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+  -a fetch-config -m ec2 -s \
+  -c file:/opt/aws/amazon-cloudwatch-agent/etc/cloudwatch-agent.json
+systemctl enable amazon-cloudwatch-agent
+
+# The host retrieves its identity using IMDSv2; credentials stay with its role.
+IMDS_TOKEN=$(curl --fail --silent --show-error --connect-timeout 2 --max-time 5 \
+  --retry 5 --request PUT \
+  --header 'X-aws-ec2-metadata-token-ttl-seconds: 60' \
+  http://169.254.169.254/latest/api/token)
+INSTANCE_ID=$(curl --fail --silent --show-error --connect-timeout 2 --max-time 5 \
+  --retry 5 --header "X-aws-ec2-metadata-token: $IMDS_TOKEN" \
+  http://169.254.169.254/latest/meta-data/instance-id)
+unset IMDS_TOKEN
+
 systemctl enable --now docker
 retry docker info
 
@@ -54,7 +74,7 @@ if docker container inspect node-api >/dev/null 2>&1; then
 fi
 
 echo "Starting Node.js on the host's loopback interface."
-docker run -d \
+docker create \
   --name node-api \
   --restart unless-stopped \
   --publish 127.0.0.1:3000:3000 \
@@ -69,10 +89,17 @@ docker run -d \
   --pids-limit 128 \
   --memory 512m \
   --memory-swap 512m \
-  --log-driver local \
-  --log-opt max-size=10m \
-  --log-opt max-file=3 \
+  --log-driver awslogs \
+  --log-opt awslogs-region="$AWS_REGION" \
+  --log-opt awslogs-group='${node_log_group}' \
+  --log-opt awslogs-stream="$INSTANCE_ID/node-api" \
+  --log-opt mode=non-blocking \
+  --log-opt max-buffer-size=4m \
+  --log-opt cache-max-size=10m \
+  --log-opt cache-max-file=3 \
   "$APP_IMAGE"
+# Retry transient start failures without creating another container.
+retry docker start node-api
 
 # Used at first launch and before Nginx starts after an EC2 reboot.
 install -d -m 755 /usr/local/bin /etc/systemd/system/nginx.service.d

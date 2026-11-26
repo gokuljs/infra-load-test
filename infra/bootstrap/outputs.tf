@@ -18,6 +18,11 @@ output "dashboard_name" {
   value       = aws_cloudwatch_dashboard.lab.dashboard_name
 }
 
+output "log_group_names" {
+  description = "Centralized application logs, with separate streams for each EC2 instance."
+  value       = { for key, group in aws_cloudwatch_log_group.app : key => group.name }
+}
+
 output "image_repository_url" {
   description = "Private repository where the build pipeline publishes the app image."
   value       = aws_ecr_repository.app.repository_url

@@ -37,6 +37,11 @@ resource "aws_launch_template" "app" {
     repository_url = aws_ecr_repository.app.repository_url
     image_digest   = data.aws_ssm_parameter.app_image_digest.value
     nginx_config   = file("${path.module}/templates/nginx.conf")
+    node_log_group = aws_cloudwatch_log_group.app["nodejs"].name
+    cloudwatch_config = templatefile("${path.module}/templates/cloudwatch-agent.json.tftpl", {
+      aws_region = var.aws_region
+      log_groups = { for key, group in aws_cloudwatch_log_group.app : key => group.name }
+    })
   }))
 
   block_device_mappings {
